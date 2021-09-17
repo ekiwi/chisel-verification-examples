@@ -51,8 +51,14 @@ class InverterTest extends AnyFlatSpec with ChiselScalatestTester with Formal {
   it should "fail the test if we set hold=true" in {
     // you can view the VCD by running
     // > gtkwave test_run_dir/Inverter_should_fail_the_test_if_we_set_holdtrue/Inverter.vcd
+
     test(new Inverter).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
       dut.in.poke(true.B)
+      dut.hold.poke(false.B)
+      dut.clock.step()
+      dut.out.expect(false.B)
+
+      dut.in.poke(false.B)
       dut.hold.poke(true.B)
       dut.clock.step()
       dut.out.expect(false.B)
@@ -76,6 +82,6 @@ class InverterTest extends AnyFlatSpec with ChiselScalatestTester with Formal {
   it should "fail a bounded check when using RegNext" in {
     // you can view the VCD by running
     // > gtkwave test_run_dir/Inverter_should_fail_a_bounded_check_when_using_RegNext/InverterWithDefectiveFormalSpec.vcd
-    verify(new InverterWithDefectiveFormalSpec, Seq(BoundedCheck(10)))
+    assertThrows[FailedBoundedCheckException](verify(new InverterWithDefectiveFormalSpec, Seq(BoundedCheck(10))))
   }
 }
