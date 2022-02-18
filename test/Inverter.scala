@@ -19,9 +19,9 @@ class InverterWithFormalSpec extends Module {
   out := delay
 
   when(past(hold)) {
-    verification.assert(stable(out))
+    assert(stable(out))
   }.otherwise {
-    verification.assert(out === !past(in))
+    assert(out === !past(in))
   }
 }
 
@@ -37,10 +37,10 @@ class InverterWithDefectiveFormalSpec extends Module {
   out := delay
 
   when(RegNext(hold)) {
-    verification.assert(out === RegNext(out))
+    assert(out === RegNext(out))
   }.otherwise {
     val inPast = dontTouch(RegNext(in)).suggestName("inPast")
-    verification.assert(out === !inPast)
+    assert(out === !inPast)
   }
 }
 

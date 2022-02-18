@@ -12,6 +12,7 @@ scalacOptions ++= Seq(
 // SNAPSHOT repositories
 libraryDependencies += "edu.berkeley.cs" %% "chisel3" % "3.5.1"
 libraryDependencies += "edu.berkeley.cs" %% "chiseltest" % "0.5.1" % Test
+addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % "3.5.1" cross CrossVersion.full)
 
 scalaSource in Compile := baseDirectory.value / "src"
 scalaSource in Test := baseDirectory.value / "test"
