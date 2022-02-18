@@ -10,10 +10,37 @@ import org.scalatest.flatspec.AnyFlatSpec
 class TestQueues extends AnyFlatSpec with ChiselScalatestTester with Formal {
   behavior of "Queues"
 
+  val DefaultDepth = 3
+  val DefaultDepthPow2 = 4 // some queues only work with power of two
+  val DefaultBmc = 7
+
   it should "verify QueueV0" in {
-    verify(new QueueFormalTest(new MyQueueV0(32)), Seq(BoundedCheck(10), BtormcEngineAnnotation))
+    verify(new QueueFormalTest(new MyQueueV0(32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
+  it should "verify QueueV1" in {
+    verify(new QueueFormalTest(new MyQueueV1(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
+
+  it should "verify QueueV2" ignore { // TODO: fix
+    verify(new QueueFormalTest(new MyQueueV2(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
+
+  it should "verify QueueV3" in {
+    verify(new QueueFormalTest(new MyQueueV3(DefaultDepthPow2,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
+
+  it should "verify QueueV4" in {
+    verify(new QueueFormalTest(new MyQueueV4(DefaultDepthPow2,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
+
+  it should "verify QueueV5" in {
+    verify(new QueueFormalTest(new MyQueueV5(DefaultDepthPow2,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
+
+  it should "verify QueueV6" ignore { // TODO: fix
+    verify(new QueueFormalTest(new MyQueueV6(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
 }
 
 class QueueFormalTest(makeQueue: => IsQueue) extends Module {

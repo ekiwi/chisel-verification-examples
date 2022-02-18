@@ -1,6 +1,4 @@
 import chisel3._
-import chisel3.experimental.verification
-import chisel3.util._
 import chiseltest._
 import chiseltest.formal._
 import org.scalatest.flatspec.AnyFlatSpec
