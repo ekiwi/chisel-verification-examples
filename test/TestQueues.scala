@@ -22,7 +22,7 @@ class TestQueues extends AnyFlatSpec with ChiselScalatestTester with Formal {
     verify(new QueueFormalTest(new MyQueueV1(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
-  it should "verify QueueV2" ignore { // TODO: fix
+  it should "verify QueueV2" ignore { // TODO: QueueV2 is broken
     verify(new QueueFormalTest(new MyQueueV2(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
@@ -38,8 +38,12 @@ class TestQueues extends AnyFlatSpec with ChiselScalatestTester with Formal {
     verify(new QueueFormalTest(new MyQueueV5(DefaultDepthPow2,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
-  it should "verify QueueV6" ignore { // TODO: fix
-    verify(new QueueFormalTest(new MyQueueV6(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+it should "verify QueueV6 w/ pipe = false" ignore { // TODO: QueueV6 is broken
+    verify(new QueueFormalTest(new MyQueueV6(DefaultDepth,32, pipe = false)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
+
+  it should "verify QueueV6 w/ pipe = true" ignore { // TODO: QueueV6 is broken
+    verify(new QueueFormalTest(new MyQueueV6(DefaultDepth,32, pipe = true)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 }
 
@@ -47,7 +51,7 @@ class QueueFormalTest(makeQueue: => IsQueue) extends Module {
   val dut = Module(makeQueue)
   val io = IO(chiselTypeOf(dut.io))
   io <> dut.io
-  MagicPacketTracker(dut.io.enq, dut.io.deq, dut.numEntries)
+  MagicPacketTracker(dut.io.enq, dut.io.deq, dut.numEntries, debugPrint = true)
 }
 
 
@@ -56,12 +60,25 @@ class QueueFormalTest(makeQueue: => IsQueue) extends Module {
 //////////////////////////////////////
 
 object MagicPacketTracker {
-  def apply[D <: Data](enq: DecoupledIO[D], deq: DecoupledIO[D], depth: Int): Unit = {
+  def apply[D <: Data](enq: DecoupledIO[D], deq: DecoupledIO[D], depth: Int, debugPrint: Boolean = false): Unit = {
     val tracker = Module(new MagicPacketTracker(chiselTypeOf(enq.bits), depth))
     tracker.enq := enq
     tracker.deq := deq
     val startTracking = IO(Input(Bool()))
     tracker.startTracking := startTracking
+    if(debugPrint) {
+      val cycle = RegInit(0.U(8.W))
+      cycle := cycle + 1.U
+      when(tracker.enq.fire) {
+        when(tracker.deq.fire) {
+          printf(p"$cycle: ${Hexadecimal(tracker.enq.bits.asUInt)} --> ${Hexadecimal(tracker.deq.bits.asUInt)}\n")
+        } .otherwise {
+          printf(p"$cycle: ${Hexadecimal(tracker.enq.bits.asUInt)} -->\n")
+        }
+      } .elsewhen(tracker.deq.fire) {
+        printf(p"$cycle: --> ${Hexadecimal(tracker.deq.bits.asUInt)}\n")
+      }
+    }
   }
 }
 
@@ -99,7 +116,7 @@ class MagicPacketTracker[D <: Data](dataTpe: D, fifoDepth: Int) extends Module {
       assert(
         enq.bits.asUInt === deq.bits.asUInt,
         "element should pass through the fifo, but %x != %x",
-        packetValue.asUInt,
+        enq.bits.asUInt,
         deq.bits.asUInt
       )
     }.otherwise {
