@@ -1,6 +1,7 @@
 import chisel3._
 import chisel3.util._
 import chiseltest._
+import chiseltest.experimental.observe
 import chiseltest.formal._
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -21,8 +22,19 @@ class TestQueues extends AnyFlatSpec with ChiselScalatestTester with Formal {
     verify(new QueueFormalTest(new MyQueueV1(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
-  it should "verify QueueV2" ignore { // TODO: QueueV2 is broken
-    verify(new QueueFormalTest(new MyQueueV2(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  it should "find bug in QueueV2" in {
+    val e = intercept[FailedBoundedCheckException] {
+      verify(new QueueV2FormalTest(new MyQueueV2(DefaultDepth, 32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+    }
+    assert(e.failAt == 3)
+  }
+
+  it should "verify QueueV2 with simple fix" in {
+    verify(new QueueFormalTest(new MyQueueV2SimpleFix(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
+  }
+
+  it should "verify QueueV2 with full fix" in {
+    verify(new QueueFormalTest(new MyQueueV2FullFix(DefaultDepth,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
   it should "verify QueueV3" in {
@@ -51,6 +63,32 @@ class QueueFormalTest(makeQueue: => IsQueue) extends Module {
   val io = IO(chiselTypeOf(dut.io))
   io <> dut.io
   MagicPacketTracker(dut.io.enq, dut.io.deq, dut.numEntries, debugPrint = true)
+}
+
+
+class QueueV2FormalTest(makeQueue: => MyQueueV2) extends Module  {
+  val dut = Module(makeQueue)
+  val io = IO(chiselTypeOf(dut.io)) ; io <> dut.io
+  MagicPacketTracker(dut.io.enq, dut.io.deq, dut.numEntries, debugPrint = false)
+  // some more debugging output
+  val entries = dut.entries.map(observe(_))
+  val full = dut.fullBits.map(observe(_))
+  val hexLen = (dut.io.enq.bits.getWidth / 4)
+  val writeIndex = observe(dut.writeIndex)
+  when(io.enq.fire) { printf("[%x] -> ", io.enq.bits) }
+    .otherwise { printf(" " * (hexLen + 6)) }
+
+  entries.zip(full).zipWithIndex.foreach { case ((entry, full), ii) =>
+    when(full) { printf(s"$ii: [%x] ", entry) }
+    .otherwise { printf(s"$ii: [${"X" * hexLen}] ") }
+    when(ii.U === writeIndex && io.enq.fire) { printf("W ") }
+    .otherwise { printf("  ") }
+  }
+
+  when(io.deq.fire) { printf("-> [%x]", io.deq.bits) }
+    .otherwise { printf(" " * (hexLen + 5)) }
+
+  printf("\n")
 }
 
 ///////////////////////////////////////////////////////
@@ -118,8 +156,8 @@ class MyQueueV2(val numEntries: Int, bitWidth: Int) extends Module with IsQueue 
   // enqueue into lowest empty and dequeue from index 0 (head)
   val entries = Reg(Vec(numEntries, UInt(bitWidth.W)))
   val fullBits = RegInit(VecInit(Seq.fill(numEntries)(false.B)))
-  val emptyBits = fullBits map { !_ }
-  io.enq.ready := emptyBits reduce { _ || _ } // any empties?
+  val emptyBits = fullBits.map(!_)
+  io.enq.ready := emptyBits.reduce( _ || _ ) // any empties?
   io.deq.valid := fullBits.head
   io.deq.bits := entries.head
   when (io.deq.fire) { // dequeue & shift up
@@ -129,12 +167,64 @@ class MyQueueV2(val numEntries: Int, bitWidth: Int) extends Module with IsQueue 
     }
     fullBits.last := false.B
   }
+  val writeIndex = PriorityEncoder(emptyBits)
   when (io.enq.fire) { // priority enqueue
-    val writeIndex = PriorityEncoder(emptyBits)
     entries(writeIndex) := io.enq.bits
     fullBits(writeIndex) := true.B
   }
 }
+
+class MyQueueV2SimpleFix(val numEntries: Int, bitWidth: Int) extends Module with IsQueue {
+  val io = IO(new QueueIO(bitWidth))
+  require(numEntries > 0)
+  // enqueue into lowest empty and dequeue from index 0 (head)
+  val entries = Reg(Vec(numEntries, UInt(bitWidth.W)))
+  val fullBits = RegInit(VecInit(Seq.fill(numEntries)(false.B)))
+  val emptyBits = fullBits.map(!_)
+  io.enq.ready := emptyBits.reduce( _ || _ ) && !io.deq.fire // any empties?
+  io.deq.valid := fullBits.head
+  io.deq.bits := entries.head
+  when (io.deq.fire) { // dequeue & shift up
+    for (i <- 0 until numEntries - 1) {
+      entries(i) := entries(i+1)
+      fullBits(i) := fullBits(i+1)
+    }
+    fullBits.last := false.B
+  }
+  val writeIndex = PriorityEncoder(emptyBits)
+  when (io.enq.fire) { // priority enqueue
+    entries(writeIndex) := io.enq.bits
+    fullBits(writeIndex) := true.B
+  }
+}
+
+class MyQueueV2FullFix(val numEntries: Int, bitWidth: Int) extends Module with IsQueue {
+  val io = IO(new QueueIO(bitWidth))
+  require(numEntries > 0)
+  // enqueue into lowest empty and dequeue from index 0 (head)
+  val entries = Reg(Vec(numEntries, UInt(bitWidth.W)))
+  val fullBits = RegInit(VecInit(Seq.fill(numEntries)(false.B)))
+  val emptyBits = fullBits.map(!_)
+  io.enq.ready := emptyBits.reduce( _ || _ ) // any empties?
+  io.deq.valid := fullBits.head
+  io.deq.bits := entries.head
+  val fullBitsAfterDeq = WireInit(fullBits)
+  when (io.deq.fire) { // dequeue & shift up
+    for (i <- 0 until numEntries - 1) {
+      entries(i) := entries(i+1)
+      fullBitsAfterDeq(i) := fullBits(i+1)
+    }
+    fullBitsAfterDeq.last := false.B
+  }
+  val writeIndex = PriorityEncoder(fullBitsAfterDeq.map(!_))
+  val fullBitsAfterEnq = WireInit(fullBitsAfterDeq)
+  when (io.enq.fire) { // priority enqueue
+    entries(writeIndex) := io.enq.bits
+    fullBitsAfterEnq(writeIndex) := true.B
+  }
+  fullBits := fullBitsAfterEnq
+}
+
 
 class MyQueueV3(val numEntries: Int, bitWidth: Int) extends Module with IsQueue {
   val io = IO(new QueueIO(bitWidth))
