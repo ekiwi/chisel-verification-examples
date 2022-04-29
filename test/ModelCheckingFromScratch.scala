@@ -1,6 +1,8 @@
 import firrtl.backends.experimental.smt._
 import org.scalatest.freespec.AnyFreeSpec
 
+import chisel3._
+
 /** Based on the SMT Solver Examples, this shows how simple BMC and induction works. */
 class ModelCheckingFromScratch extends AnyFreeSpec {
   // this uses an example from the zipcpu slides:
@@ -63,4 +65,27 @@ class ModelCheckingFromScratch extends AnyFreeSpec {
     val ind1 = solve(Seq(BVNot(bad(s0)), inv(s0), next(s0, s1), bad(s1)))
     assert(ind1.isEmpty)
   }
+}
+
+object failAfter {
+  def apply(n: Int): Unit = {
+    require(n > 0)
+    val failCount = RegInit(n.U)
+    failCount := failCount - 1.U
+    assert(failCount =/= 0.U, s"failure triggered after $n cycles")
+  }
+}
+
+class Counter extends Module {
+  val en = IO(Input(Bool()))
+  val count = RegInit(0.U(32.W))
+  when(en) {
+    when(count === 22.U) {
+      count := 0.U
+    }.otherwise {
+      count := count + 1.U
+    }
+  }
+
+  assert(count =/= 500.U)
 }

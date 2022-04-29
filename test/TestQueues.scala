@@ -38,11 +38,11 @@ class TestQueues extends AnyFlatSpec with ChiselScalatestTester with Formal {
     verify(new QueueFormalTest(new MyQueueV5(DefaultDepthPow2,32)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
-it should "verify QueueV6 w/ pipe = false" ignore { // TODO: QueueV6 is broken
+  it should "verify QueueV6 w/ pipe = false" in {
     verify(new QueueFormalTest(new MyQueueV6(DefaultDepth,32, pipe = false)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 
-  it should "verify QueueV6 w/ pipe = true" ignore { // TODO: QueueV6 is broken
+  it should "verify QueueV6 w/ pipe = true" in {
     verify(new QueueFormalTest(new MyQueueV6(DefaultDepth,32, pipe = true)), Seq(BoundedCheck(DefaultBmc), BtormcEngineAnnotation))
   }
 }
@@ -317,8 +317,15 @@ class MyQueueV6(val numEntries: Int, bitWidth: Int, pipe: Boolean=true) extends 
     io.enq.ready := !full
   io.deq.valid := !empty
   io.deq.bits := entries(deqIndex.value)
-  when (indicesEqual && io.deq.fire =/= io.enq.fire) {
-    maybeFull := !maybeFull
+  val fixed = true
+  if(fixed) {
+    when (io.deq.fire =/= io.enq.fire) {
+      maybeFull := io.enq.fire
+    }
+  } else {
+    when (indicesEqual && io.deq.fire =/= io.enq.fire) {
+      maybeFull := !maybeFull
+    }
   }
   when (io.deq.fire) {
     deqIndex.inc()
