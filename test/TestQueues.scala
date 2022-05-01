@@ -208,21 +208,19 @@ class MyQueueV2FullFix(val numEntries: Int, bitWidth: Int) extends Module with I
   io.enq.ready := emptyBits.reduce( _ || _ ) // any empties?
   io.deq.valid := fullBits.head
   io.deq.bits := entries.head
-  val fullBitsAfterDeq = WireInit(fullBits)
   when (io.deq.fire) { // dequeue & shift up
     for (i <- 0 until numEntries - 1) {
       entries(i) := entries(i+1)
-      fullBitsAfterDeq(i) := fullBits(i+1)
+      fullBits(i) := fullBits(i+1)
     }
-    fullBitsAfterDeq.last := false.B
+    fullBits.last := false.B
   }
-  val writeIndex = PriorityEncoder(fullBitsAfterDeq.map(!_))
-  val fullBitsAfterEnq = WireInit(fullBitsAfterDeq)
+  val writeIndex = PriorityEncoder(emptyBits)
+  val adjustedWriteIndex = Mux(io.deq.fire, writeIndex - 1.U, writeIndex)
   when (io.enq.fire) { // priority enqueue
-    entries(writeIndex) := io.enq.bits
-    fullBitsAfterEnq(writeIndex) := true.B
+    entries(adjustedWriteIndex) := io.enq.bits
+    fullBits(adjustedWriteIndex) := true.B
   }
-  fullBits := fullBitsAfterEnq
 }
 
 
